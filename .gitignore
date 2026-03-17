@@ -1,0 +1,6 @@
+.env
+calendar.err.log
+calendar.log
+credentials.json
+token.json
+/__pycache__/
