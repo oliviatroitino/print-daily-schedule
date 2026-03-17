@@ -4,3 +4,4 @@ calendar.log
 credentials.json
 token.json
 /__pycache__/
+.DS_Store
