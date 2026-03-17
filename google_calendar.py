@@ -6,28 +6,20 @@ from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 import datetime
 import subprocess
-import requests
 from pprint import pformat
 
-SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
-
-SCHEDULE = "4380d16c4c569e8c92a27f6622e0bc869f5be9069c3d57a52cd13223d54fbf7c@group.calendar.google.com"
-ROUTINE = "213a968c503a9037ddce3cf1616a93e441938da770ded218488f452cb37144d8@group.calendar.google.com"
-SOCIAL = "2f4ccb4fab7b4c3c364986cb6cba03446cca89a4b8ce093a04eef4833c904e5e@group.calendar.google.com"
-ASSIGNMENTS = "45e0e8464482acc2403e5a58064e2830991f82e642c757b432ab2173bc6f51bb@group.calendar.google.com"
-
+scopes = os.getenv('SCOPES', 'https://www.googleapis.com/auth/calendar.readonly').split(',')
 debug_events = os.getenv('DEBUG_EVENTS', '').strip().lower() in {'1', 'true', 'yes', 'on'}
-
 
 def get_service():
     creds = None
     if os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+        creds = Credentials.from_authorized_user_file('token.json', scopes)
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
+            flow = InstalledAppFlow.from_client_secrets_file('credentials.json', scopes=scopes)
             creds = flow.run_local_server(port=0)
         with open('token.json', 'w') as token:
             token.write(creds.to_json())
