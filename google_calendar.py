@@ -1,4 +1,5 @@
 import os
+import textwrap
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
@@ -52,11 +53,29 @@ def collect_events(events, include_day=False):
         if start_str:
             start_dt = datetime.datetime.fromisoformat(start_str)
             if include_day:
-                result.append(start_dt.strftime('%H:%M') + ' ' + event['summary'] + ' (' + start_dt.strftime('%a %d-%m') + ')')
+                prefix = start_dt.strftime('%a %d ') + start_dt.strftime('%H:%M') + ' '
+                indent = ' ' * len(prefix)
+                available = int(os.getenv('WIDTH', '40')) - len(prefix)
+                wrapped = textwrap.wrap(event['summary'], width=available, break_long_words=False)
+                result.append(prefix + wrapped[0])
+                for line in wrapped[1:]:
+                    result.append(indent + line)
             else:
-                result.append(start_dt.strftime('%H:%M') + ' ' + event['summary'])
+                prefix = start_dt.strftime('%H:%M') + ' '
+                indent = ' ' * len(prefix)
+                available = int(os.getenv('WIDTH', '40')) - len(prefix)
+                wrapped = textwrap.wrap(event['summary'], width=available, break_long_words=False)
+                result.append(prefix + wrapped[0])
+                for line in wrapped[1:]:
+                    result.append(indent + line)
         else:
-            result.append('Hand in ' + event['summary'] + ' by today!!!')
+            prefix = 'Hand in: '
+            indent = ' ' * len(prefix)
+            available = int(os.getenv('WIDTH', '40')) - len(prefix)
+            wrapped = textwrap.wrap(event['summary'], width=available, break_long_words=False)
+            result.append(prefix + wrapped[0])
+            for line in wrapped[1:]:
+                result.append(indent + line)
     return result
 
 def event_start_key(event):
@@ -75,9 +94,7 @@ def merge_and_sort_events(*event_lists):
 
     for events in event_lists:
         for event in events:
-            start_str = event['start'].get('dateTime')
-            if not start_str:
-                continue  # Skip events without a valid start time
+            # start_str = event['start'].get('dateTime')
             if debug_events:
                 print('\nEvent dictionary:\n' + pformat(event, sort_dicts=False, width=100))
             event_id = event.get('id')
@@ -118,7 +135,11 @@ def merge_and_sort_events(*event_lists):
     return collapsed_events
 
 
-def send_to_printer(content: str):
+def send_to_printer(content: str, save_as_txt=False):
+    if save_as_txt:
+        with open('calendar.output.txt', 'w', encoding='utf-8') as output_file:
+            output_file.write(content)
+
     printer_name = os.getenv('PRINTER_NAME')
     if not printer_name:
         print('\n\nPRINTER_NAME is not set, skipping print.')
