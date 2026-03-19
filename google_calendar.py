@@ -10,8 +10,13 @@ from pprint import pformat
 
 scopes = os.getenv('SCOPES', 'https://www.googleapis.com/auth/calendar.readonly').split(',')
 debug_events = os.getenv('DEBUG_EVENTS', '').strip().lower() in {'1', 'true', 'yes', 'on'}
+testing = os.getenv('TESTING', '').strip().lower() in {'1', 'true', 'yes', 'on'}
+free = int(os.getenv('FREE_VALUE', '0').strip())
+light = int(os.getenv('LIGHT_VALUE', '6').strip())
+busy = int(os.getenv('BUSY_VALUE', '9').strip())
 
-def get_service():
+
+def get_calendar_service():
     creds = None
     if os.path.exists('token.json'):
         creds = Credentials.from_authorized_user_file('token.json', scopes)
@@ -25,7 +30,7 @@ def get_service():
             token.write(creds.to_json())
     return build('calendar', 'v3', credentials=creds)
 
-def getEvents(service, calendarId, time_min, time_max):
+def get_events(service, calendarId, time_min, time_max):
     events = service.events().list(
         calendarId=calendarId,
         timeMin=time_min,
@@ -38,12 +43,18 @@ def getEvents(service, calendarId, time_min, time_max):
 
 def collect_events(events, include_day=False):
     result = []
+    local_tz = datetime.datetime.now().astimezone().tzinfo
     if not events:
         result.append('No upcoming events found.')
     for event in events:
         start_str = event['start'].get('dateTime')
         if start_str:
+            if start_str.endswith('Z'):
+                start_str = start_str[:-1] + '+00:00'
             start_dt = datetime.datetime.fromisoformat(start_str)
+            if start_dt.tzinfo is None:
+                start_dt = start_dt.replace(tzinfo=datetime.timezone.utc)
+            start_dt = start_dt.astimezone(local_tz)
             if include_day:
                 prefix = start_dt.strftime('%a %d ') + start_dt.strftime('%H:%M') + ' '
                 indent = ' ' * len(prefix)
@@ -137,6 +148,17 @@ def send_to_printer(content: str, save_as_txt=False):
         print('\n\nPRINTER_NAME is not set, skipping print.')
         return
 
-    printer_name = printer_name.strip()
-    subprocess.run(['lpr', '-P', printer_name], input=content, text=True, check=True)
-    print(f'Sent to printer: {printer_name}')
+    if not testing:
+        printer_name = printer_name.strip()
+        subprocess.run(['lpr', '-P', printer_name], input=content, text=True, check=True)
+        print(f'Sent to printer: {printer_name}')
+
+def count_events(*event_lists):
+    total = 0
+    for events in event_lists:
+        total += len(events)
+    
+    if total == free: return "Free"
+    elif total <= light: return "Light"
+    elif total <= busy: return "Busy"
+    else: return "Overloaded"
