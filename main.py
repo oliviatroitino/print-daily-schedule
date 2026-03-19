@@ -3,7 +3,9 @@ import textwrap
 from dotenv import load_dotenv
 import datetime
 
-from google_calendar import get_service, getEvents, collect_events, merge_and_sort_events, send_to_printer
+from google_calendar import get_calendar_service, get_events, collect_events, merge_and_sort_events, send_to_printer, count_events
+from google_tasks import get_tasks_service, get_tasks, collect_tasks
+
 from weather import get_weather
 
 load_dotenv()  # loads .env from current project folder
@@ -15,45 +17,51 @@ div2 = width - div1 - 3
 divider = ('-' * div1) + '=+=' + ('-' * div2)
 
 # Define date and time range for today, tomorrow and the week
-service = get_service()
+calendar_service = get_calendar_service()
 today = datetime.date.today()
-time_min = datetime.datetime(today.year, today.month, today.day, tzinfo=datetime.timezone.utc).isoformat()
-time_max = datetime.datetime(today.year, today.month, today.day, 23, 59, 59, tzinfo=datetime.timezone.utc).isoformat()
-time_min_tomorrow = datetime.datetime(today.year, today.month, today.day + 1, tzinfo=datetime.timezone.utc).isoformat()
-time_max_tomorrow = datetime.datetime(today.year, today.month, today.day + 1, 23, 59, 59, tzinfo=datetime.timezone.utc).isoformat()
-time_max_week = datetime.datetime(today.year, today.month, today.day + 7, 23, 59, 59, tzinfo=datetime.timezone.utc).isoformat()
+local_tz = datetime.datetime.now().astimezone().tzinfo
+tomorrow = today + datetime.timedelta(days=1)
+week_end = today + datetime.timedelta(days=7)
+
+time_min = datetime.datetime.combine(today, datetime.time.min, tzinfo=local_tz).isoformat()
+time_max = datetime.datetime.combine(today, datetime.time.max.replace(microsecond=0), tzinfo=local_tz).isoformat()
+time_min_tomorrow = datetime.datetime.combine(tomorrow, datetime.time.min, tzinfo=local_tz).isoformat()
+time_max_tomorrow = datetime.datetime.combine(tomorrow, datetime.time.max.replace(microsecond=0), tzinfo=local_tz).isoformat()
+time_max_week = datetime.datetime.combine(week_end, datetime.time.max.replace(microsecond=0), tzinfo=local_tz).isoformat()
 
 # Get Google Calendar events for set time ranges
-uni_schedule = getEvents(service, os.getenv("SCHEDULE"), time_min, time_max)
-social_schedule = getEvents(service, os.getenv("SOCIAL"), time_min, time_max)
-assignments_schedule = getEvents(service, os.getenv("ASSIGNMENTS"), time_min, time_max)
-assignments_week_schedule = getEvents(service, os.getenv("ASSIGNMENTS"), time_min_tomorrow, time_max_week)
-tomorrow_schedule = getEvents(service, os.getenv("SCHEDULE"), time_min_tomorrow, time_max_tomorrow)
+uni_schedule = get_events(calendar_service, os.getenv("SCHEDULE"), time_min, time_max)
+social_schedule = get_events(calendar_service, os.getenv("SOCIAL"), time_min, time_max)
+assignments_schedule = get_events(calendar_service, os.getenv("ASSIGNMENTS"), time_min, time_max)
+assignments_week_schedule = get_events(calendar_service, os.getenv("ASSIGNMENTS"), time_min_tomorrow, time_max_week)
+tomorrow_schedule = get_events(calendar_service, os.getenv("SCHEDULE"), time_min_tomorrow, time_max_tomorrow)
 today_schedule = merge_and_sort_events(uni_schedule, assignments_schedule)
-wednesday_schedule = getEvents(service, os.getenv("ROUTINE"), time_min, time_max)
+wednesday_schedule = get_events(calendar_service, os.getenv("ROUTINE"), time_min, time_max)
+
+daily_forecast = count_events(uni_schedule, social_schedule, assignments_schedule, tomorrow_schedule, wednesday_schedule)
+
 
 # Get Weather info for today
 weather, err = get_weather(os.getenv("WEATHER_CITY", "Madrid"))
 
 # Format output
 ''' DIVIDER VERSION: format divider-title-divider'''
-def event_title(title, first_title=False, no_divider=False):
-    if no_divider: result = []
+def event_title(title, first_title=False, no_top_divider=False, no_bottom_divider=False):
+    title = title.strip()
+    if no_top_divider: result = []
     else:
         if first_title: result = [divider]
         else: result = ['\n' + divider]
     
     if len(title) > width:
-        title_wrapped = textwrap.wrap(title, width=len(title)//1.5, break_long_words=False)
+        title_wrapped = textwrap.wrap(title, width=width, break_long_words=False)
         for line in title_wrapped:
             result.append(line.center(width))
-        if len(result[-1]) < width:
-            result[-1] += '-' * (width - len(result[-1]))
         
-        if not no_divider:
+        if not no_bottom_divider:
             result.append(divider + '\n')
     else:
-        if no_divider:
+        if no_bottom_divider:
             result.append(title.center(width))
         else:
             result.append(title.center(width) + '\n' + divider + '\n')
@@ -62,7 +70,8 @@ def event_title(title, first_title=False, no_divider=False):
 
 lines = []
 lines.append(event_title(today.strftime('%d-%m-%Y'), True))
-lines.append(event_title(f"Today's weather in {os.getenv('WEATHER_CITY', 'Madrid')}: {weather['temp']:.0f}\u00b0C, {weather['desc']}".center(len(divider)), True, True))
+lines.append(event_title(f"Today's weather in {os.getenv('WEATHER_CITY', 'Madrid')}: {weather['temp']:.0f}\u00b0C, {weather['desc']}".center(len(divider)), first_title=True, no_top_divider=True, no_bottom_divider=True))
+lines.append(event_title(f"Daily Forecast: {daily_forecast}", no_top_divider=True, no_bottom_divider=True))
 
 if today.isoweekday() in [6, 7]:  # Weekend
     lines.append("It's the weekend! No uni, just social events and preparation for the week.\n")
